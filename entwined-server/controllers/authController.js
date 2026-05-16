@@ -103,6 +103,8 @@ const login = async (req, res) => {
 
     if (email === "demo@entwined.com") {
       let demoUser = await User.findOne({ email: "demo@entwined.com" });
+      let friendUser = await User.findOne({ email: "friend@entwined.com" });
+
       if (!demoUser) {
         const hashedPassword = await bcrypt.hash("demo123", 12);
         demoUser = await User.create({
@@ -111,35 +113,53 @@ const login = async (req, res) => {
           password: hashedPassword,
           isVerified: true
         });
+      }
 
-        let friendUser = await User.findOne({ email: "friend@entwined.com" });
-        if (!friendUser) {
-          const friendHashed = await bcrypt.hash("friend123", 12);
-          friendUser = await User.create({
-            username: "BookWorm",
-            email: "friend@entwined.com",
-            password: friendHashed,
-            isVerified: true
-          });
-        }
+      if (!friendUser) {
+        const friendHashed = await bcrypt.hash("friend123", 12);
+        friendUser = await User.create({
+          username: "BookWorm",
+          email: "friend@entwined.com",
+          password: friendHashed,
+          isVerified: true
+        });
+      }
 
-        const Friendship = require("../models/Friendship");
+      const Friendship = require("../models/Friendship");
+      let friendship = await Friendship.findOne({
+        users: { $all: [demoUser._id, friendUser._id] }
+      });
+      if (!friendship) {
         await Friendship.create({
           users: [demoUser._id, friendUser._id],
           status: "accepted"
         });
+      }
 
-        const Conversation = require("../models/Conversation");
-        const conv = await Conversation.create({
+      const Conversation = require("../models/Conversation");
+      let conv = await Conversation.findOne({
+        participants: { $all: [demoUser._id, friendUser._id] },
+        type: "one-to-one"
+      });
+      if (!conv) {
+        conv = await Conversation.create({
           type: "one-to-one",
           participants: [demoUser._id, friendUser._id]
         });
+      }
 
-        const Message = require("../models/Message");
+      const Message = require("../models/Message");
+      const unreadCount = await Message.countDocuments({
+        conversationId: conv._id,
+        sender: friendUser._id,
+        "readBy.user": { $ne: demoUser._id }
+      });
+
+      if (unreadCount === 0) {
         const msg = await Message.create({
           conversationId: conv._id,
           sender: friendUser._id,
-          text: "Hey Demo! Have you read the latest Brandon Sanderson book?",
+          text: "Hey Demo! Here is a fresh live message to test your unread badges! 🚀",
           readBy: [{ user: friendUser._id, readAt: new Date() }]
         });
 
